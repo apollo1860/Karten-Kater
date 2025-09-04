@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Shot-Memory 5×5</title>
+<style>
+  :root{
+    --bg: #0f1320;
+    --panel: #151a2c;
+    --ink: #e7ecff;
+    --muted: #a8b0d3;
+    --acc: #7a85ff;
+    --shadow: 0 8px 24px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.3);
+    --qmark: #ff2d55;
+    --good: #bbf7d0;   /* hellgrün */
+    --bad:  #fecaca;   /* hellrot */
+    --all:  #fef08a;   /* gelb */
+    --shot: #39ff14;   /* giftgrün */
+    --card: #1b2340;
+  }
+
+  html, body {
+    height: 100%;
+    background: radial-gradient(1200px 900px at 50% -10%, #1d2442 0%, #0e1224 55%, #090d1b 100%);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    margin: 0;
+  }
+
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: clamp(10px, 2.5vw, 20px);
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  header {
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom: 10px;
+  }
+
+  .title {
+    font-weight: 700;
+    letter-spacing:.3px;
+    font-size: clamp(18px, 3.8vw, 22px);
+    opacity: .95;
+  }
+
+  /* Restart button (fixiert rechts oben) */
+  .restart {
+    position: fixed;
+    top: max(10px, env(safe-area-inset-top));
+    right: max(10px, env(safe-area-inset-right));
+    z-index: 20;
+    background: linear-gradient(180deg, #2a325f, #1b2348);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.12);
+    padding: 10px 12px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform .08s ease, filter .2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .restart:active { transform: scale(.98); }
+  .restart svg { width: 18px; height: 18px; }
+
+  /* Dice */
+  .dice-area{
+    display:grid;
+    grid-template-columns: auto 1fr;
+    align-items:center;
+    gap: 14px;
+    margin: 10px 0 14px;
+  }
+  .dice{
+    width: clamp(64px, 20vw, 96px);
+    aspect-ratio: 1/1;
+    border-radius: 20px;
+    background: linear-gradient(165deg, #f4f7ff, #dfe7ff 55%, #cfd8ff);
+    border: 2px solid #c8d1ff;
+    box-shadow: var(--shadow);
+    display:grid;
+    grid-template-columns: repeat(3,1fr);
+    grid-template-rows: repeat(3,1fr);
+    padding: 8%;
+    gap: 6%;
+    position: relative;
+    cursor: pointer;
+    animation: float 4.5s ease-in-out infinite;
+    -webkit-tap-highlight-color: transparent;
+  }
+  @keyframes float {
+    0%,100%{ transform: translateY(0) }
+    50%{ transform: translateY(-4px) }
+  }
+  .dice.rolling { animation: shake .4s ease-in-out 1; }
+  @keyframes shake {
+    0%{ transform: rotate(0deg) translateX(0) }
+    25%{ transform: rotate(6deg) translateX(2px) }
+    50%{ transform: rotate(-6deg) translateX(-2px) }
+    75%{ transform: rotate(4deg) translateX(1px) }
+    100%{ transform: rotate(0deg) translateX(0) }
+  }
+  .pip{
+    width: 70%;
+    height: 70%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #30364f, #0f1325 65%);
+    box-shadow: inset 0 0 1px rgba(255,255,255,.2), 0 1px 0 rgba(0,0,0,.25);
+    opacity: 0;
+    transform: scale(.6);
+    transition: opacity .18s ease, transform .18s ease;
+    justify-self:center; align-self:center;
+  }
+  .pip.on{ opacity: 1; transform: scale(1); }
+
+  .status {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.35;
+    user-select: none;
+  }
+  .status strong{ color: #fff; }
+
+  /* Grid 5x5 */
+  .grid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: clamp(4px, 1.2vw, 6px);
+    perspective: 900px;
+  }
+
+  .card {
+    background: transparent;
+    border: none;
+    padding: 0;
+    position: relative;
+    aspect-ratio: 1 / 1;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .card-inner{
+    position: absolute; inset: 0;
+    transform-style: preserve-3d;
+    transition: transform .5s cubic-bezier(.2,.7,.2,1);
+    will-change: transform;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+
+  .card.flipped .card-inner{
+    transform: rotateY(180deg);
+  }
+
+  .face{
+    position:absolute; inset:0;
+    backface-visibility: hidden;
+    border-radius: 12px;
+    overflow: hidden;
+    display:grid;
+    place-items:center;
+  }
+
+  /* Verdeckt (Front) */
+  .front{
+    background:
+      radial-gradient(120% 85% at 50% 10%, #273059, #121833 65%, #0c1024 100%);
+    border: 1px solid rgba(255,255,255,.07);
+  }
+
+  .front .qmark{
+    font-size: clamp(28px, 7vw, 42px);
+    font-weight: 900;
+    color: var(--qmark);
+    /* „dickes“ Fragezeichen durch mehrfachen Schatten */
+    text-shadow:
+      0 1px 0 rgba(0,0,0,.35),
+      0 0 1px rgba(0,0,0,.35),
+      0 0 2px rgba(0,0,0,.35),
+      0 0 4px rgba(255,45,85,.35);
+    transform: translateY(-2px);
+    letter-spacing: 1px;
+  }
+
+  /* Aufgedeckt (Back) */
+  .back{
+    transform: rotateY(180deg);
+    border: 1px solid rgba(0,0,0,.08);
+    color: #102015;
+    font-weight: 800;
+    font-size: clamp(12px, 3.1vw, 15px);
+    text-align:center;
+    padding: 6px;
+    line-height: 1.2;
+  }
+  .back.bad   { background: linear-gradient(180deg, var(--bad), #ffd0d0); color:#2a0b0b; }
+  .back.good  { background: linear-gradient(180deg, var(--good), #dcfce7); color:#0d2916; }
+  .back.all   { background: linear-gradient(180deg, var(--all), #fff2a1); color:#363004; }
+  .back.shot  {
+    background: linear-gradient(180deg, var(--shot), #9dff8b);
+    color:#002b12;
+    font-size: clamp(16px, 4.6vw, 22px);
+    letter-spacing: .8px;
+  }
+
+  /* Mini helper glows when die ready */
+  .die-ready { outline: 2px dashed rgba(255,255,255,.3); outline-offset: 6px; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100%{ filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+    50%{ filter: drop-shadow(0 0 10px rgba(255,255,255,.25)); }
+  }
+
+  /* Overlay bei SHOT */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(2px);
+    display: none;
+    place-items: center;
+    z-index: 30;
+  }
+  .overlay.show { display:grid; }
+  .modal {
+    background: linear-gradient(180deg, #1a213e, #0f1633);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 16px;
+    padding: 18px 16px;
+    box-shadow: var(--shadow);
+    text-align:center;
+    width: min(92vw, 420px);
+  }
+  .modal h2{
+    margin: 2px 0 8px;
+    font-size: clamp(18px, 5.2vw, 24px);
+  }
+  .modal p{ margin: 0 0 14px; color: var(--muted); }
+  .modal .primary{
+    background: linear-gradient(180deg, #34d399, #10b981);
+    color:#062016;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-weight: 800;
+    letter-spacing:.25px;
+    box-shadow: 0 8px 20px rgba(16,185,129,.35);
+  }
+  .modal .primary:active { transform: translateY(1px); }
+
+  /* Disable clicks helper */
+  .disabled { pointer-events: none; }
+
+  /* Saubere Auswahlverhinderung */
+  * { -webkit-user-select: none; user-select: none; }
+</style>
+</head>
+<body>
+  <button class="restart" id="restartBtn" aria-label="Spiel neu starten" title="Spiel neu starten">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 3v6h6" />
+    </svg>
+    Neustart
+  </button>
+
+  <div class="wrap">
+    <header>
+      <div class="title">Shot-Memory 5×5</div>
+    </header>
+
+    <div class="dice-area">
+      <div class="dice die-ready" id="dice" role="button" aria-label="Würfel">
+        <!-- 9 Pips (3×3) -->
+        <div class="pip" data-pos="1"></div>
+        <div class="pip" data-pos="2"></div>
+        <div class="pip" data-pos="3"></div>
+        <div class="pip" data-pos="4"></div>
+        <div class="pip" data-pos="5"></div>
+        <div class="pip" data-pos="6"></div>
+        <div class="pip" data-pos="7"></div>
+        <div class="pip" data-pos="8"></div>
+        <div class="pip" data-pos="9"></div>
+      </div>
+      <div class="status" id="status">
+        Tippe auf den <strong>Würfel</strong>, um zu starten. Du darfst dann so viele Karten aufdecken, wie du würfelst.
+      </div>
+    </div>
+
+    <div class="grid" id="grid" aria-label="Spielfeld 5×5"></div>
+  </div>
+
+  <!-- Overlay bei SHOT -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>SHOT! 🥃</h2>
+      <p>Wer die giftgrüne Karte aufdeckt, verliert und trinkt einen Shot.</p>
+      <button class="primary" id="overlayRestart">Neues Spiel</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const grid = document.getElementById('grid');
+  const dice = document.getElementById('dice');
+  const statusEl = document.getElementById('status');
+  const restartBtn = document.getElementById('restartBtn');
+  const overlay = document.getElementById('overlay');
+  const overlayRestart = document.getElementById('overlayRestart');
+
+  const PIP_MAP = {
+    0: [],
+    1: [5],
+    2: [1,9],
+    3: [1,5,9],
+    4: [1,3,7,9],
+    5: [1,3,5,7,9],
+    6: [1,3,4,6,7,9], // klassisch: drei links + drei rechts
+  };
+
+  let flipsRemaining = 0;
+  let gameOver = false;
+
+  const mkEl = (tag, cls, txt) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (txt) el.textContent = txt;
+    return el;
+  };
+
+  function shuffle(arr){
+    for(let i=arr.length-1; i>0; i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function buildDeck(){
+    const deck = [];
+    // good (hellgrün): 6×1, 3×2, 1×3 Schlücke (ver-teilen)
+    for(let i=0;i<6;i++) deck.push({ cls:'good', text:'Verteile 1 Schluck' });
+    for(let i=0;i<3;i++) deck.push({ cls:'good', text:'Verteile 2 Schlücke' });
+    deck.push({ cls:'good', text:'Verteile 3 Schlücke' });
+
+    // bad (rot): 6×1, 3×2, 1×3 Schlücke (trinken)
+    for(let i=0;i<6;i++) deck.push({ cls:'bad', text:'Trinke 1 Schluck' });
+    for(let i=0;i<3;i++) deck.push({ cls:'bad', text:'Trinke 2 Schlücke' });
+    deck.push({ cls:'bad', text:'Trinke 3 Schlücke' });
+
+    // all (gelb): 4× alle trinken 1
+    for(let i=0;i<4;i++) deck.push({ cls:'all', text:'Alle trinken 1 Schluck' });
+
+    // deck length: 24 (Mitte ist SHOT)
+    return shuffle(deck);
+  }
+
+  function setDiceFace(n){
+    const pips = [...dice.querySelectorAll('.pip')];
+    pips.forEach(p => p.classList.remove('on'));
+    (PIP_MAP[n] || []).forEach(pos=>{
+      const pip = dice.querySelector(`.pip[data-pos="${pos}"]`);
+      pip && pip.classList.add('on');
+    });
+  }
+
+  function coveredCount(){
+    return grid.querySelectorAll('.card:not(.flipped)').length;
+  }
+
+  function updateStatus(){
+    if (gameOver) {
+      statusEl.innerHTML = 'Spiel beendet. Starte neu für eine weitere Runde.';
+      return;
+    }
+    const cov = coveredCount();
+    if (cov === 0) {
+      statusEl.innerHTML = 'Alle Karten aufgedeckt. Tippe auf <strong>Neustart</strong>, um erneut zu spielen.';
+      return;
+    }
+    if (flipsRemaining > 0) {
+      statusEl.innerHTML = `Du darfst noch <strong>${flipsRemaining}</strong> Karte${flipsRemaining===1?'':'n'} aufdecken.`;
+    } else {
+      statusEl.innerHTML = 'Nächster Spieler: Tippe auf den <strong>Würfel</strong>.';
+    }
+  }
+
+  function toggleDieReady(on){
+    dice.classList.toggle('die-ready', !!on);
+  }
+
+  function roll(){
+    if (gameOver) return;
+    if (flipsRemaining > 0) return;
+    dice.classList.add('rolling');
+    toggleDieReady(false);
+
+    // kleine „Shuffle“-Animation der Pips vor dem Ergebnis
+    let t = 0, tempRolls = 6;
+    const temp = setInterval(()=>{
+      t++;
+      setDiceFace(Math.floor(Math.random()*7));
+      if (t >= tempRolls) {
+        clearInterval(temp);
+        const n = Math.floor(Math.random()*7); // 0–6 inkl.
+        setDiceFace(n);
+        const available = coveredCount();
+        flipsRemaining = Math.min(n, available);
+        dice.classList.remove('rolling');
+        updateStatus();
+      }
+    }, 70);
+  }
+
+  function endGame(){
+    gameOver = true;
+    flipsRemaining = 0;
+    toggleDieReady(false);
+    updateStatus();
+    overlay.classList.add('show');
+  }
+
+  function createCard({ text, cls }, isShot=false){
+    const btn = mkEl('button', 'card');
+    btn.setAttribute('aria-label', isShot ? 'SHOT Karte' : 'Verdeckte Karte');
+
+    const inner = mkEl('div', 'card-inner');
+    const front = mkEl('div', 'face front');
+    const q = mkEl('div', 'qmark', '?');
+    front.appendChild(q);
+
+    const back = mkEl('div', `face back ${isShot? 'shot': cls}`);
+    back.textContent = isShot ? 'SHOT' : text;
+
+    inner.appendChild(front);
+    inner.appendChild(back);
+    btn.appendChild(inner);
+
+    // Click-Handler
+    btn.addEventListener('click', () => {
+      if (gameOver) return;
+      if (btn.classList.contains('flipped')) return;
+      if (flipsRemaining <= 0) return;
+
+      btn.classList.add('flipped'); // bleibt offen bis Neustart
+      flipsRemaining--;
+      if (isShot) {
+        // kleiner Delay für Flip-Animation, dann Overlay
+        setTimeout(endGame, 450);
+      } else {
+        updateStatus();
+        if (flipsRemaining === 0 && !gameOver && coveredCount() > 0) {
+          // Nächster Spieler darf würfeln
+          setTimeout(()=>toggleDieReady(true), 200);
+        }
+      }
+    });
+
+    return btn;
+  }
+
+  function buildBoard(){
+    grid.innerHTML = '';
+    const deck = buildDeck();
+    for(let i=0;i<25;i++){
+      if (i === 12) {
+        grid.appendChild(createCard({ text:'SHOT', cls:'shot' }, true)); // Mitte
+      } else {
+        grid.appendChild(createCard(deck.pop(), false));
+      }
+    }
+  }
+
+  function resetGame(){
+    gameOver = false;
+    flipsRemaining = 0;
+    setDiceFace(0);
+    buildBoard();
+    toggleDieReady(true);
+    updateStatus();
+    overlay.classList.remove('show');
+  }
+
+  // Events
+  dice.addEventListener('click', roll);
+  restartBtn.addEventListener('click', resetGame);
+  overlayRestart.addEventListener('click', resetGame);
+
+  // Init
+  resetGame();
+})();
+</script>
+</body>
+</html>
