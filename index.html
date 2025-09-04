@@ -428,56 +428,65 @@
     overlay.classList.add('show');
   }
 
-  function createCard({ text, cls }, isShot=false){
-    const btn = mkEl('button', 'card');
-    btn.setAttribute('aria-label', isShot ? 'SHOT Karte' : 'Verdeckte Karte');
+function createCard({ text, cls }, isShot=false){
+  const btn = mkEl('button', 'card');
+  btn.setAttribute('aria-label', isShot ? 'SHOT Karte' : 'Verdeckte Karte');
 
-    const inner = mkEl('div', 'card-inner');
+  const inner = mkEl('div', 'card-inner');
+
+  if (isShot) {
+    // Shot-Karte ist sofort sichtbar (kein Fragezeichen)
+    const back = mkEl('div', 'face back shot');
+    back.textContent = 'SHOT';
+    inner.appendChild(back);
+    btn.classList.add('flipped'); // direkt sichtbar
+  } else {
+    // Normale Karte mit Vorderseite (Fragezeichen) und Rückseite
     const front = mkEl('div', 'face front');
     const q = mkEl('div', 'qmark', '?');
     front.appendChild(q);
 
-    const back = mkEl('div', `face back ${isShot? 'shot': cls}`);
-    back.textContent = isShot ? 'SHOT' : text;
+    const back = mkEl('div', `face back ${cls}`);
+    back.textContent = text;
 
     inner.appendChild(front);
     inner.appendChild(back);
-    btn.appendChild(inner);
-
-    // Click-Handler
-    btn.addEventListener('click', () => {
-      if (gameOver) return;
-      if (btn.classList.contains('flipped')) return;
-      if (flipsRemaining <= 0) return;
-
-      btn.classList.add('flipped'); // bleibt offen bis Neustart
-      flipsRemaining--;
-      if (isShot) {
-        // kleiner Delay für Flip-Animation, dann Overlay
-        setTimeout(endGame, 450);
-      } else {
-        updateStatus();
-        if (flipsRemaining === 0 && !gameOver && coveredCount() > 0) {
-          // Nächster Spieler darf würfeln
-          setTimeout(()=>toggleDieReady(true), 200);
-        }
-      }
-    });
-
-    return btn;
   }
 
-  function buildBoard(){
-    grid.innerHTML = '';
-    const deck = buildDeck();
-    for(let i=0;i<25;i++){
-      if (i === 12) {
-        grid.appendChild(createCard({ text:'SHOT', cls:'shot' }, true)); // Mitte
-      } else {
-        grid.appendChild(createCard(deck.pop(), false));
+  btn.appendChild(inner);
+
+  // Click-Handler
+  btn.addEventListener('click', () => {
+    if (gameOver) return;
+    if (btn.classList.contains('flipped')) return;
+    if (flipsRemaining <= 0) return;
+
+    btn.classList.add('flipped'); 
+    flipsRemaining--;
+    if (isShot) {
+      setTimeout(endGame, 450);
+    } else {
+      updateStatus();
+      if (flipsRemaining === 0 && !gameOver && coveredCount() > 0) {
+        setTimeout(()=>toggleDieReady(true), 200);
       }
     }
+  });
+
+  return btn;
+}
+
+function buildBoard(){
+  grid.innerHTML = '';
+  const deck = buildDeck();
+  for(let i=0;i<25;i++){
+    if (i === 12) {
+      grid.appendChild(createCard({ text:'SHOT', cls:'shot' }, true)); // Mitte sofort grün/weiß sichtbar
+    } else {
+      grid.appendChild(createCard(deck.pop(), false));
+    }
   }
+}
 
   function resetGame(){
     gameOver = false;
